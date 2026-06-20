@@ -1,0 +1,1 @@
+export { MovieFormPage } from './MovieFormPage';

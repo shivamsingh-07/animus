@@ -1,0 +1,19 @@
+# Installed in the image by `yarn install`
+node_modules
+
+# Produced in the image by `yarn build` (vite build + tsc)
+dist
+.vite
+*.tsbuildinfo
+
+# Local env — the app only reads VITE_API_URL; never bake real env into the image
+.env
+.env.*
+
+# Yarn debug output
+yarn-debug.log*
+yarn-error.log*
+
+# Image metadata — not needed inside the build context
+Dockerfile
+.dockerignore

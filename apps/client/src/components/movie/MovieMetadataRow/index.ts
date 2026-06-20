@@ -1,0 +1,1 @@
+export { MovieMetadataRow } from './MovieMetadataRow';

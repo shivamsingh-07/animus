@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply min-h-dvh bg-ink font-sans text-slate-100 antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    /* Subtle brand-blue wash over the neutral dark base (matches the client). */
+    background-image:
+      radial-gradient(1100px 540px at 10% -10%, rgba(59, 130, 246, 0.14), transparent 60%),
+      radial-gradient(900px 520px at 100% 0%, rgba(59, 130, 246, 0.08), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background-color: rgba(59, 130, 246, 0.85);
+    color: #fff;
+  }
+
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #3a3a3a transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #3a3a3a;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #555;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply border border-white/10 bg-white/[0.055] backdrop-blur-xl;
+  }
+
+  .glass-strong {
+    @apply border border-white/10 bg-white/[0.08] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-2xl;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-primary {
+    @apply btn bg-white text-black shadow-lg hover:bg-neutral-200;
+  }
+
+  .btn-ghost {
+    @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10;
+  }
+
+  .btn-danger {
+    @apply btn border border-red-500/30 bg-red-500/10 text-red-200 hover:bg-red-500/20;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-brand/60 focus:ring-2 focus:ring-brand/25;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

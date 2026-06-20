@@ -1,0 +1,12 @@
+# Local virtualenv + bytecode caches (recreated in the image)
+.venv
+__pycache__/
+*.pyc
+
+# Local env / secrets — never bake into the image
+.env
+.env.*
+
+# Image metadata — not needed inside the build context
+Dockerfile
+.dockerignore
