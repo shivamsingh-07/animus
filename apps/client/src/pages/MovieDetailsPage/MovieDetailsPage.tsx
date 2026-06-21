@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FiCheck, FiPlay, FiPlus } from 'react-icons/fi';
+import { FiCheck, FiFilm, FiPlay, FiPlus } from 'react-icons/fi';
 import { useParams } from 'react-router-dom';
 import { fadeUp, staggerContainer } from '@/animations';
 import { ImageWithFallback } from '@/components/common/ImageWithFallback';
@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/common/ErrorState';
 import { PrimaryButton } from '@/components/common/PrimaryButton';
 import { MovieDetailsSkeleton } from '@/components/movie/MovieDetailsSkeleton';
 import { MovieMetadataRow } from '@/components/movie/MovieMetadataRow';
+import { TrailerModal } from '@/components/movie/TrailerModal';
 import { useMovie, useDocumentTitle } from '@/hooks';
 import { useWatchlist } from '@/store';
 
@@ -18,6 +19,7 @@ export default function MovieDetailsPage() {
 
   const { data: movie, loading, error } = useMovie(movieId);
   const { isInWatchlist, toggle } = useWatchlist();
+  const [trailerOpen, setTrailerOpen] = useState(false);
 
   useDocumentTitle(movie);
 
@@ -125,6 +127,11 @@ export default function MovieDetailsPage() {
                 <PrimaryButton to={`/watch/${movie.id}`} className="px-7 py-3 text-base">
                   <FiPlay className="h-5 w-5 fill-current" aria-hidden /> Play Now
                 </PrimaryButton>
+                {movie.trailer_url && (
+                  <button type="button" onClick={() => setTrailerOpen(true)} className="btn-secondary">
+                    <FiFilm className="h-5 w-5" aria-hidden /> Watch Trailer
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => toggle(movie.id)}
@@ -165,6 +172,15 @@ export default function MovieDetailsPage() {
           </motion.div>
         </div>
       </section>
+
+      {movie.trailer_url && (
+        <TrailerModal
+          open={trailerOpen}
+          trailerUrl={movie.trailer_url}
+          title={movie.title}
+          onClose={() => setTrailerOpen(false)}
+        />
+      )}
     </PageTransition>
   );
 }
