@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { FiDownloadCloud, FiFilm, FiStar, FiUploadCloud } from 'react-icons/fi';
 import { tap } from '@/animations';
 import type { ImportedMovie, PresignedUpload } from '@/types';
@@ -207,8 +207,8 @@ export function MovieFormPage() {
       setCreatedId(movieId);
       setImportNotice(
         upload.existing
-          ? 'This movie is already in the catalog — uploading will replace its file.'
-          : 'Entry created. Choose the movie file and upload it.',
+          ? 'Already in the catalog — uploading replaces it.'
+          : 'Ready to upload.',
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import from TMDB.');
@@ -233,21 +233,21 @@ export function MovieFormPage() {
       navigate('/');
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'Upload failed.';
-      setError(`${reason} The movie is in the catalog as “created” — delete it or retry.`);
+      setError(`${reason} Delete the entry and try again.`);
       setUploading(false);
     }
   }
 
   return (
     <PageTransition>
-      <PageHeader title="Add Movie" subtitle="Import from TMDB, then upload the movie file." />
+      <PageHeader title="Add Movie" subtitle="Import from TMDB, then upload the video." />
 
       {error && <GlassCard className="mb-4 p-4 text-sm text-red-300">{error}</GlassCard>}
 
       <GlassCard className="mb-4 p-5">
         <h2 className="text-sm font-semibold text-white">Import from TMDB</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Paste a TMDB movie link to fetch its details and prepare an upload slot.
+          Paste a TMDB link to import a movie.
         </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
@@ -289,11 +289,7 @@ export function MovieFormPage() {
           <GlassCard className="p-5">
             <h2 className="text-sm font-semibold text-white">Upload movie file</h2>
             <p className="mt-1 text-xs text-slate-400">
-              Upload sends the file to{' '}
-              <code className="text-slate-300">{presign?.bucket}</code> and sets status to{' '}
-              <span className="text-slate-300">uploaded</span> on success. The catalog entry was
-              created when you fetched from TMDB. If the upload fails, delete the entry from the
-              catalog and try again.
+              Choose the video file and upload it.
             </p>
 
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -312,24 +308,23 @@ export function MovieFormPage() {
                 className="btn-primary shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FiUploadCloud className="h-4 w-4" aria-hidden />
-                {uploading ? `Uploading… ${progress}%` : 'Upload file'}
+                {uploading ? 'Uploading…' : 'Upload file'}
               </motion.button>
             </div>
 
             {uploading && (
-              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-brand-500 transition-[width] duration-200"
-                  style={{ width: `${progress}%` }}
-                />
+              <div className="mt-4">
+                <div className="h-3 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-white transition-[width] duration-200"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-center text-lg font-bold tabular-nums text-white">
+                  {progress}%
+                </p>
               </div>
             )}
-
-            <div className="mt-5 border-t border-white/10 pt-5">
-              <Link to="/" className="btn-ghost">
-                Cancel
-              </Link>
-            </div>
           </GlassCard>
         </motion.div>
       ) : (
@@ -337,9 +332,9 @@ export function MovieFormPage() {
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/15 text-brand-400">
             <FiFilm className="h-7 w-7" aria-hidden />
           </span>
-          <h2 className="text-lg font-semibold text-white">No movie loaded yet</h2>
+          <h2 className="text-lg font-semibold text-white">Nothing loaded yet</h2>
           <p className="max-w-sm text-sm text-slate-400">
-            Paste a TMDB link above and fetch the details to preview the movie and upload its file.
+            Import a movie from TMDB to get started.
           </p>
         </GlassCard>
       )}

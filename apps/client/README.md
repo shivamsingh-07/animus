@@ -29,7 +29,7 @@ Vite, Tailwind CSS, React Router, Framer Motion, and dash.js.
 
 ## Requirements
 
-- **Node 18+** with npm.
+- **Node 18+** with Yarn.
 - A running **ANIMUS API** with at least one `ready` title, otherwise the catalog
   is empty.
 
@@ -45,11 +45,11 @@ Create `apps/client/.env` only if you need to override the default.
 
 ```bash
 cd apps/client
-npm install
-npm run dev        # http://localhost:5173
+yarn install
+yarn dev           # http://localhost:5173
 
-npm run build      # type-check (tsc) + production build to dist/
-npm run preview    # serve the production build locally
+yarn build         # type-check (tsc) + production build to dist/
+yarn preview       # serve the production build locally
 ```
 
 ### Docker

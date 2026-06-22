@@ -42,7 +42,7 @@ in sync with the API's model.
 - **FFmpeg / ffprobe** and **Bento4** (`mp4fragment`, `mp4dash`) on `PATH`. The
   Docker image installs both; for local runs provide them yourself and set
   `BENTO4_BIN`.
-- **Python 3.10+** (the image uses 3.12). Dependencies (`requirements.txt`):
+- **Python 3.10+** (the image uses 3.14). Dependencies (`requirements.txt`):
   boto3, SQLAlchemy, PyMySQL, python-dotenv.
 - Access to the shared **MySQL** catalog, the **S3** raw + DASH buckets, and the
   **SQS** queue.
@@ -67,7 +67,7 @@ environment comes from `--env-file`/`-e`.
 | `AWS_ENDPOINT_URL`                                                               | —                   | Custom endpoint for all AWS calls (LocalStack/MinIO)                  |
 | `BENTO4_BIN`                                                                     | `/opt/bento4/bin`   | Bento4 binaries (set by the image)                                    |
 
-## Build & run
+## Getting started
 
 ```bash
 cd apps/transcode
@@ -94,7 +94,7 @@ apps/transcode/
 ├── scripts/
 │   ├── convert.sh     # FFmpeg renditions + audio/subtitles/thumbnails
 │   └── package.sh     # Bento4 DASH packaging (manifest.mpd + segments)
-├── Dockerfile         # python:3.12-slim + ffmpeg + Bento4
+├── Dockerfile         # python:3.14-slim + ffmpeg + Bento4
 └── requirements.txt   # boto3, SQLAlchemy, PyMySQL, python-dotenv
 ```
 
@@ -109,5 +109,3 @@ apps/transcode/
   poison job doesn't loop forever.
 - The DASH bucket needs CORS allowing `GET`/`HEAD` from the client origin if the
   player streams from it directly (rather than via CloudFront).
-```
-

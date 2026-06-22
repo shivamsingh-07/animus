@@ -24,7 +24,7 @@ Tailwind CSS, React Router, and Framer Motion.
 
 ## Requirements
 
-- **Node 18+** with npm.
+- **Node 18+** with Yarn.
 - A running **ANIMUS API**. The upload flow additionally needs the API's S3
   configuration (and, for `uploaded` -> transcoding, its SQS queue) to be set.
 
@@ -40,11 +40,11 @@ Create `apps/admin/.env` only if you need to override the default.
 
 ```bash
 cd apps/admin
-npm install
-npm run dev        # http://localhost:5174
+yarn install
+yarn dev           # http://localhost:5174
 
-npm run build      # type-check (tsc) + production build to dist/
-npm run preview    # serve the production build locally
+yarn build         # type-check (tsc) + production build to dist/
+yarn preview       # serve the production build locally
 ```
 
 ### Docker

@@ -51,7 +51,7 @@ flag, **not** authentication — put real auth in front of it before production.
 
 ## Requirements
 
-- **Python 3.10+**
+- **Python 3.10+** (the Docker image uses 3.14).
 - A reachable **MySQL 8** database (local or AWS RDS). Tables are created on
   startup via `db.create_all()`, but the database/schema itself must already
   exist. There is no fallback — the app fails fast if MySQL isn't configured.
@@ -59,7 +59,7 @@ flag, **not** authentication — put real auth in front of it before production.
   token only if you use metadata import.
 
 Python dependencies (`requirements.txt`): Flask, Flask-Cors, Flask-SQLAlchemy,
-SQLAlchemy, PyMySQL, boto3, python-dotenv, requests.
+SQLAlchemy, PyMySQL, waitress, boto3, python-dotenv, requests.
 
 ### Environment variables
 
@@ -105,7 +105,7 @@ chain (the keys below, or an IAM role).
 | `TMDB_API_BASE`     | `https://api.themoviedb.org/3` | TMDB API base URL              |
 | `TMDB_IMAGE_BASE`   | `https://image.tmdb.org/t/p`   | TMDB image base URL            |
 
-## Run
+## Getting started
 
 ```bash
 cd apps/api
@@ -113,7 +113,21 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # create .env with at least the MYSQL_* values, then:
-python run.py            # serves http://127.0.0.1:4000
+python run.py            # serves http://127.0.0.1:4000 via waitress
+```
+
+`run.py` serves the app with **waitress**; set `ENV=development` for Flask's
+debug server with auto-reload instead.
+
+### Docker
+
+A slim Dockerfile installs the dependencies and runs the same `run.py` (waitress
+on port 4000).
+
+```bash
+cd apps/api
+docker build -t animus-api .
+docker run --rm -p 4000:4000 --env-file .env animus-api
 ```
 
 ## Endpoints

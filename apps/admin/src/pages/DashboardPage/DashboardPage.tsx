@@ -162,7 +162,7 @@ export function DashboardPage() {
               <EmptyState
                 icon={<FiFilm className="h-6 w-6" />}
                 title="No movies yet"
-                message="Add your first title to the catalog."
+                message="Add your first movie."
                 action={
                   <Link to="/movies/new" className="btn-primary">
                     <FiPlusCircle className="h-4 w-4" aria-hidden /> Add Movie
@@ -173,7 +173,7 @@ export function DashboardPage() {
               <EmptyState
                 icon={<FiSearch className="h-6 w-6" />}
                 title="No matches"
-                message={`Nothing in the catalog matches “${query.trim()}”.`}
+                message={`No movies match “${query.trim()}”.`}
               />
             ) : (
               <GlassCard className="overflow-hidden">
