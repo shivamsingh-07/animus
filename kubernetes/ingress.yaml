@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: animus-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: animus.com
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: animus-client-svc
+                port:
+                  number: 80
+
+    - host: admin.animus.com
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: animus-admin-svc
+                port:
+                  number: 80

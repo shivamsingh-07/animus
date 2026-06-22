@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: animus-worker
+spec:
+  selector:
+    matchLabels:
+      app: animus-worker
+  template:
+    metadata:
+      labels:
+        app: animus-worker
+    spec:
+      nodeSelector:
+        role: transcoder
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/worker
+          operator: Equal
+          value: worker
+      containers:
+        - name: animus-worker
+          image: abstergo07/animus-worker:latest
+          envFrom:
+            - configMapRef:
+                name: animus-config
+            - secretRef:
+                name: animus-secrets
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "1"
+            limits:
+              memory: "3Gi"
+              cpu: "3"

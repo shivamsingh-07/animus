@@ -1,14 +1,21 @@
-# Animus - Movie Streaming Platform
+# ANIMUS — Cinematic Movie Streaming Platform
 
-ANIMUS is a cinematic movie-streaming platform: a public website to browse and
-watch titles, an admin dashboard to manage the catalog and ingest video, a Flask
-API in front of a MySQL catalog, and a containerized worker that transcodes raw
-uploads into adaptive **DASH** streams.
+ANIMUS is a full-stack, **microservices** movie-streaming platform — a miniature
+Netflix you can run end to end. A **React + TypeScript** website streams
+adaptive-bitrate **MPEG-DASH** video through a custom **dash.js** player; an admin
+dashboard ingests titles by importing **TMDB** metadata and uploading source files
+straight to object storage; a **Flask + SQLAlchemy** API fronts a **MySQL** catalog;
+and an **event-driven** **FFmpeg + Bento4** worker transcodes raw uploads into DASH
+renditions. Every service is **Dockerized** and ships to **Kubernetes** with **KEDA**
+queue-based autoscaling, targeting **AWS** (EKS, S3, SQS, RDS, CloudFront).
 
-The pieces are **independent services** — they share no code, only the HTTP API
-contract and a few AWS resources (MySQL, S3, SQS). Each service has its own
-README with the working details, requirements, and setup; this document is the
-map.
+### Highlights
+
+- 🎬 **Adaptive streaming** — MPEG-DASH at 1080p/720p/480p through a custom dash.js player with quality, audio, and subtitle tracks, plus trick-play thumbnails.
+- 🧱 **Microservices monorepo** — independent **client**, **admin**, **API**, and **transcoder**; the only contract between them is the HTTP API's JSON shape.
+- ⚙️ **Event-driven pipeline** — presigned **S3** uploads → **SQS** → **KEDA**-scaled **FFmpeg/Bento4** workers → DASH served from S3/CloudFront.
+- ☸️ **Cloud-native** — Docker images, Kubernetes manifests, and KEDA autoscaling that run on **minikube + Floci** locally or **AWS EKS** in production.
+- 🗂️ **TMDB-powered catalog** — admins add a title by pasting a TMDB link; metadata and artwork are fetched server-side.
 
 ## Services
 
@@ -19,16 +26,54 @@ map.
 | `apps/api`       | Catalog HTTP API                 | Python, Flask, SQLAlchemy, MySQL              | http://localhost:4000 | [README](apps/api/README.md)       |
 | `apps/transcode` | Raw → DASH worker (SQS-driven)   | Python, FFmpeg, Bento4                        | — (worker)            | [README](apps/transcode/README.md) |
 
-## Architecture
+The four services share no code — only the HTTP API contract and a few backing
+resources (MySQL, S3, SQS). Each has its own README with full setup details.
 
-The platform runs on AWS. An **ALB ingress** fronts an **EKS** cluster where the
-client, admin, and Flask API each run as their own Kubernetes deployment. The
-frontends never touch the database — they go through the API, which persists the
-catalog to **MySQL (RDS)** and decouples video ingest through an **SQS** queue.
-**KEDA** scales the transcode worker pods off that queue: they read the raw
-upload from S3, write the packaged **DASH** output to a second S3 bucket, and
-update the catalog row directly. **CloudFront** fronts the DASH bucket for
-playback.
+## How it works
+
+The catalog and the video pipeline are **decoupled**: the API owns the MySQL
+catalog, and ingestion runs asynchronously through a queue so a slow transcode never
+blocks the apps.
+
+| Step | What happens                                                                              |
+| ---- | ----------------------------------------------------------------------------------------- |
+| 1    | Admin imports TMDB metadata, then uploads the raw file straight to S3 via a presigned URL |
+| 2    | Backend creates the movie row in MySQL (`status = created`)                               |
+| 3    | On upload, the API enqueues a transcode job in SQS (`SendMessage`)                        |
+| 4    | KEDA sees queue depth > 0 and scales up the transcoder worker(s)                          |
+| 5    | Worker pulls the raw file from S3 and runs FFmpeg + Bento4                                |
+| 6    | Worker uploads the DASH segments + manifest to the processed S3 bucket                    |
+| 7    | Worker updates MySQL (`status = ready`, `manifest_url = …`)                               |
+| 8    | Worker deletes the SQS message — job complete                                             |
+| 9    | Client fetches the `ready` catalog from the API                                           |
+| 10   | Player streams the `.mpd` + segments from the CDN (CloudFront in prod)                    |
+
+A title moves through these statuses as it is ingested:
+
+`created` -> `uploaded` -> `processing` -> `ready` (or `failed`)
+
+- **created** — catalog row exists; raw file not uploaded yet (admin).
+- **uploaded** — raw file is in S3; the API has enqueued a transcode job.
+- **processing** — the transcode worker has picked up the job.
+- **ready** — DASH stream published; visible to the public client.
+- **failed** — transcode failed; left for retry/inspection.
+
+Only `ready` titles are served to the public client; the admin sees every status.
+
+## Architecture (AWS — planned)
+
+> **Status: planned, not yet implemented.** This is the **target AWS production
+> deployment**. Today the stack runs locally on minikube + Floci (see
+> [Running on Kubernetes](#running-on-kubernetes-minikube--floci)), which mirrors
+> this design — the cloud rollout is future work.
+
+In production, an **ALB ingress** fronts an **EKS** cluster where the client, admin,
+and Flask API each run as their own Kubernetes deployment. The frontends never touch
+the database — they go through the API, which persists the catalog to **MySQL (RDS)**
+and decouples video ingest through an **SQS** queue. **KEDA** scales the transcode
+worker pods off that queue: they read the raw upload from **S3**, write the packaged
+**DASH** output to a second S3 bucket, and update the catalog row directly.
+**CloudFront** fronts the DASH bucket for playback.
 
 ```mermaid
 flowchart TD
@@ -98,35 +143,6 @@ flowchart TD
     class CDN cdn
 ```
 
----
-
-## Flow Summary
-
-| Step | What happens                                                     |
-| ---- | ---------------------------------------------------------------- |
-| 1    | Admin uploads raw video directly to S3 via presigned URL         |
-| 2    | Backend creates movie row in MySQL (`status = created`)          |
-| 3    | Backend API sends a transcode job to SQS (`SendMessage`)         |
-| 4    | KEDA detects queue depth > 0 → scales up transcoder worker pods  |
-| 5    | Worker downloads raw file from S3, runs FFmpeg + Bento4          |
-| 6    | Worker uploads DASH segments + manifest to S3 processed bucket   |
-| 7    | Worker updates MySQL (`status = ready`, `manifest_url = ...`)    |
-| 8    | Worker deletes SQS message — job complete                        |
-| 9    | Client fetches movie catalog from Backend API                    |
-| 10   | Client player fetches `.mpd` + segments directly from CloudFront |
-
-A title moves through these statuses as it is ingested:
-
-`created` -> `uploaded` -> `processing` -> `ready` (or `failed`)
-
-- **created** — catalog row exists; raw file not uploaded yet (admin).
-- **uploaded** — raw file is in S3; the API has enqueued a transcode job.
-- **processing** — the transcode worker has picked up the job.
-- **ready** — DASH stream published; visible to the public client.
-- **failed** — transcode failed; left for retry/inspection.
-
-Only `ready` titles are served to the public client; the admin sees every status.
-
 ## Repository layout
 
 ```text
@@ -136,27 +152,101 @@ Only `ready` titles are served to the public client; the admin sees every status
 │   ├── admin/       # admin dashboard            (see its README)
 │   ├── api/         # Flask catalog API          (see its README)
 │   └── transcode/   # SQS-driven DASH transcoder (see its README)
-├── notes.md        # AWS provisioning notes (RDS, S3, SQS, EKS, CloudFront)
+├── kubernetes/     # K8s manifests: deployments, services, ingress, KEDA autoscaler
+├── scripts/        # cluster lifecycle, Floci provisioning, deploy
 └── README.md       # you are here
 ```
 
-## Getting started
+## Quick start
 
-There is no root installer or orchestrator — each service runs on its own. Start
-the **API first** (the frontends depend on it), then whichever UI you want. Full
-setup and configuration live in each service's README:
+The fastest way to run ANIMUS is to start each service directly — no root installer.
+Bring up the **API first** (the frontends depend on it), then whichever UI you want;
+full per-service setup lives in each app's README.
 
-1. **API** — [apps/api](apps/api/README.md): create a venv, install
-   `requirements.txt`, configure MySQL in `.env`, then `python run.py` (:4000).
-2. **Client** — [apps/client](apps/client/README.md): `npm install` then
-   `npm run dev` (:5173).
-3. **Admin** — [apps/admin](apps/admin/README.md): `npm install` then
-   `npm run dev` (:5174).
-4. **Transcode worker** — [apps/transcode](apps/transcode/README.md): runs as a
-   container long-polling SQS, against the shared S3 buckets and MySQL.
+1. **API** — [apps/api](apps/api/README.md): create a venv, `pip install -r requirements.txt`,
+   set the `MYSQL_*` values in `.env`, then `python run.py` (:4000).
+2. **Client** — [apps/client](apps/client/README.md): `npm install` then `npm run dev` (:5173).
+3. **Admin** — [apps/admin](apps/admin/README.md): `npm install` then `npm run dev` (:5174).
+4. **Transcoder** — [apps/transcode](apps/transcode/README.md): a container that
+   long-polls SQS against the shared S3 buckets and MySQL.
 
-Each service reads its own configuration from a local, uncommitted `.env`; the
-required variables are documented in that service's README.
+Each service reads its own configuration from a local, uncommitted `.env`, documented
+in its README.
+
+## Running on Kubernetes (minikube + Floci)
+
+The whole stack also runs on a local 3-node **minikube** cluster against **Floci**, a
+local AWS emulator that provides S3, SQS, and a real `mysql:8.0` "RDS" container — so
+you exercise the same manifests, ingress, and KEDA autoscaling as production without
+touching real AWS. Manifests live in `kubernetes/`; the helpers in `scripts/` wire it
+together.
+
+**Prerequisites:** `docker`, `minikube`, `kubectl`, `helm`, `socat`, the `aws` CLI,
+and Floci.
+
+### How the cluster reaches Floci
+
+Floci runs on the host, so two pieces of glue (both wired into `scripts/cluster.sh`)
+give in-cluster pods a stable name to reach it:
+
+- **CoreDNS** maps `aws.animus.com` → the host gateway, so pods hit Floci's S3/SQS at
+  `aws.animus.com:4566` (which Floci publishes on the host).
+- **socat** bridges Floci's RDS — which only listens on the Docker bridge — onto the
+  host gateway, so pods reach MySQL at `aws.animus.com:7001`.
+
+### Steps
+
+1. **Start Floci and provision its resources** (RDS, S3 buckets, SQS queue):
+
+    ```bash
+    floci start
+    scripts/setup-local-aws.sh  # prints the RDS endpoint as "host port"
+    ```
+
+    If that endpoint isn't `172.17.0.2:7001`, set `FLOCI_RDS_ADDR` in
+    `scripts/cluster.sh` to match.
+
+2. **Create the cluster.** Starts a 3-node minikube (control-plane + `application` +
+   `transcoder`), sizes/taints the transcoder node for FFmpeg, enables the ingress +
+   metrics addons, patches CoreDNS, and starts the RDS socat bridge:
+
+    ```bash
+    scripts/cluster.sh create
+    ```
+
+3. **Map the hostnames** in `/etc/hosts` (use `minikube -p animus ip` for the
+   cluster IP):
+
+    ```text
+    <minikube-ip>   animus.com admin.animus.com
+    127.0.0.1       aws.animus.com
+    ```
+
+4. **Check `kubernetes/config.yaml`.** For Floci the AWS keys are `test`/`test`,
+   `MYSQL_HOST: aws.animus.com` / `MYSQL_PORT: "7001"`, and `MYSQL_SSL_DISABLED:
+"true"` (Floci's MySQL advertises TLS but can't complete the handshake).
+
+5. **Build and push the service images** to your container registry, then deploy
+   the stack:
+
+    ```bash
+    scripts/deploy-k8s-stack.sh
+    ```
+
+### Access
+
+- Client → http://animus.com
+- Admin → http://admin.animus.com
+
+The API is internal; each frontend's nginx proxies `/api` to it. There's no
+CloudFront locally, so the player streams DASH straight from Floci's S3.
+
+### Teardown
+
+```bash
+scripts/cluster.sh stop     # stop the cluster + RDS bridge (state kept)
+scripts/cluster.sh delete   # remove the cluster entirely
+```
 
 ## Conventions
 

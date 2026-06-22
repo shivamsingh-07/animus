@@ -1,0 +1,35 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: animus-sqs-auth
+spec:
+  secretTargetRef:
+    - parameter: awsAccessKeyID
+      name: animus-secrets
+      key: AWS_ACCESS_KEY_ID
+    - parameter: awsSecretAccessKey
+      name: animus-secrets
+      key: AWS_SECRET_ACCESS_KEY
+
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: animus-worker
+spec:
+  scaleTargetRef:
+    name: animus-worker
+  minReplicaCount: 0
+  maxReplicaCount: 1
+  pollingInterval: 30
+  cooldownPeriod: 120
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: animus-sqs-auth
+      metadata:
+        queueURL: http://aws.animus.com:4566/000000000000/animus-transcode-jobs
+        awsRegion: us-east-1
+        awsEndpoint: http://aws.animus.com:4566
+        queueLength: "1"
+        scaleOnInFlight: "true"

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: animus-config
+data:
+  MYSQL_HOST: aws.animus.com
+  MYSQL_PORT: "7001"
+  MYSQL_USER: admin
+  MYSQL_DATABASE: animus
+  MYSQL_SSL_DISABLED: "true"
+  AWS_ENDPOINT_URL: http://aws.animus.com:4566
+  SQS_TRANSCODE_QUEUE_URL: http://aws.animus.com:4566/000000000000/animus-transcode-jobs
+  SQS_QUEUE_URL: http://aws.animus.com:4566/000000000000/animus-transcode-jobs
+  DASH_PUBLIC_BASE_URL: http://aws.animus.com:4566/animus-dash-files
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: animus-secrets
+type: Opaque
+stringData:
+  MYSQL_PASSWORD: password
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  TMDB_API_KEY: ...
+  TMDB_ACCESS_TOKEN: ...
