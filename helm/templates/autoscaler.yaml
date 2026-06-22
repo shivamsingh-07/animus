@@ -1,0 +1,29 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: animus-aws-auth
+spec:
+  podIdentity:
+    provider: aws
+    identityOwner: workload
+
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: animus-worker-autoscaler
+spec:
+  scaleTargetRef:
+    name: animus-worker
+  minReplicaCount: {{ .Values.worker.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.worker.keda.maxReplicas }}
+  pollingInterval: 30
+  cooldownPeriod: 120
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: animus-aws-auth
+      metadata:
+        queueURL: {{ .Values.config.sqsQueueUrl | quote }}
+        awsRegion: {{ .Values.config.region | quote }}
+        queueLength: "1"

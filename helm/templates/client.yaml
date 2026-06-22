@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: animus-client
+  labels:
+    app: animus-client
+spec:
+  replicas: {{ .Values.client.replicas }}
+  selector:
+    matchLabels:
+      app: animus-client
+  template:
+    metadata:
+      labels:
+        app: animus-client
+    spec:
+      containers:
+        - name: animus-client
+          image: "{{ .Values.image.repository }}/animus-client:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: API_UPSTREAM
+              value: http://animus-api-svc:4000
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.client.resources | nindent 12 }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: animus-client-svc
+  labels:
+    app: animus-client
+spec:
+  selector:
+    app: animus-client
+  ports:
+    - port: 80
+      targetPort: 80

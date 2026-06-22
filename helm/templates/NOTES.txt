@@ -1,0 +1,14 @@
+ANIMUS installed as "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+  client -> http://{{ .Values.ingress.hosts.client }}
+  admin  -> http://{{ .Values.ingress.hosts.admin }}
+  api    -> internal only (animus-api-svc:4000)
+  worker -> KEDA SQS autoscaled {{ .Values.worker.keda.minReplicas }}–{{ .Values.worker.keda.maxReplicas }}
+
+Get the ALB address (provisioned by the AWS Load Balancer Controller), then point
+your DNS for the hosts above at it:
+
+  kubectl get ingress animus -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+
+Requires in-cluster: AWS Load Balancer Controller, KEDA, and
+an IRSA role on serviceAccount "{{ .Values.serviceAccount.name }}".

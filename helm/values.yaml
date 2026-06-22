@@ -1,0 +1,66 @@
+image:
+  repository: abstergo07
+  tag: latest
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  name: animus-sa
+  roleArn: ""
+
+config:
+  region: ap-south-1
+  mysql:
+    host: ""
+    port: "3306"
+    user: admin
+    database: animus
+  rawBucket: animus-raw-files
+  dashBucket: animus-dash-files
+  sqsQueueUrl: ""
+  dashBaseUrl: ""
+
+secrets:
+  mysqlPassword: ""
+  tmdbApiKey: ""
+  tmdbAccessToken: ""
+
+api:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+client:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+admin:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 200m, memory: 128Mi }
+
+worker:
+  resources:
+    requests: { cpu: "1", memory: 1Gi }
+    limits: { cpu: "3", memory: 3Gi }
+  nodeSelector:
+    role: worker
+  tolerations:
+    - { key: dedicated, value: worker, effect: NoSchedule }
+  keda:
+    minReplicas: 0
+    maxReplicas: 3
+
+ingress:
+  className: alb
+  hosts:
+    client: animus.com
+    admin: admin.animus.com
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'

@@ -1,0 +1,14 @@
+apiVersion: v2
+
+name: animus
+
+description: >-
+  Cloud-native, Netflix-style movie streaming platform — public client,
+  admin dashboard, Flask API, and an FFmpeg/Bento4 DASH transcode worker —
+  packaged for AWS EKS (ALB ingress, IRSA, RDS, S3, SQS, CloudFront, KEDA).
+
+type: application
+
+version: 0.1.0
+
+appVersion: "1.0.0"

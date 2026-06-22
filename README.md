@@ -60,72 +60,60 @@ A title moves through these statuses as it is ingested:
 
 Only `ready` titles are served to the public client; the admin sees every status.
 
-## Architecture (AWS — planned)
+## Architecture (AWS)
 
-> **Status: planned, not yet implemented.** This is the **target AWS production
-> deployment**. Today the stack runs locally on minikube + Floci (see
-> [Running on Kubernetes](#running-on-kubernetes-minikube--floci)), which mirrors
-> this design — the cloud rollout is future work.
+The platform runs on an **EKS** cluster inside a multi-AZ **VPC**. **Route 53**
+resolves the public hostnames to an internet-facing **ALB** (provisioned by the AWS
+Load Balancer Controller), which fans `animus.com` and `admin.animus.com` to the
+client and admin pods. Those frontends are nginx and never touch the database — they
+proxy `/api` to the internal **Flask API**, which owns the **RDS MySQL** catalog and
+decouples ingest through an **SQS** queue.
 
-In production, an **ALB ingress** fronts an **EKS** cluster where the client, admin,
-and Flask API each run as their own Kubernetes deployment. The frontends never touch
-the database — they go through the API, which persists the catalog to **MySQL (RDS)**
-and decouples video ingest through an **SQS** queue. **KEDA** scales the transcode
-worker pods off that queue: they read the raw upload from **S3**, write the packaged
-**DASH** output to a second S3 bucket, and update the catalog row directly.
-**CloudFront** fronts the DASH bucket for playback.
+The cluster runs two managed node groups: an untainted **`application`** group for the
+client/admin/API pods, and a tainted **`worker`** group dedicated to the CPU-heavy
+transcoder. **KEDA** watches SQS depth and scales the transcoder from zero — each pod
+pulls the raw upload from the **S3** raw bucket, runs **FFmpeg + Bento4**, writes the
+**DASH** output to the second bucket, and updates the catalog row directly. The admin
+uploads source files straight to S3 with a **presigned PUT**, and **CloudFront** fronts
+the DASH bucket for playback. API and worker pods authenticate to S3/SQS via **IRSA**
+(`animus-sa` assumes an IAM role through the cluster's OIDC provider) — no static keys
+live in the cluster.
 
 ```mermaid
-flowchart TD
-    %% ── Frontends ──
-    CF["🎬 Client Frontend\nReact + dash.js"]
-    AF["⚙️ Admin Frontend\nReact + Upload UI"]
+flowchart TB
+    User["👤 Users"]
+    R53["Route 53"]
+    ALB["ALB Ingress"]
 
-    %% ── Ingress ──
-    ALB["ALB Ingress\nKubernetes"]
+    subgraph EKS["EKS Cluster"]
+        CFE["Client\nReact · nginx"]
+        AFE["Admin\nReact · nginx"]
+        BE["API\nFlask"]
+        WK["Transcoder\nFFmpeg + Bento4"]
+    end
 
-    %% ── Backend ──
-    BE["Backend API\nFlask"]
+    DB[("RDS MySQL")]
+    SQS["SQS Queue"]
+    S3R["S3 · raw"]
+    S3P["S3 · DASH"]
+    CDN["☁️ CloudFront"]
 
-    %% ── Storage layer ──
-    DB[("MySQL\nRDS · Movie catalog")]
-    SQS["SQS Queue\ntranscode-jobs"]
+    User --> R53 --> ALB
+    ALB --> CFE
+    ALB --> AFE
+    CFE -->|"/api"| BE
+    AFE -->|"/api"| BE
+    AFE -->|"presigned upload"| S3R
+    BE -->|"catalog"| DB
+    BE -->|"enqueue job"| SQS
+    SQS -->|"KEDA scales"| WK
+    WK -->|"read raw"| S3R
+    WK -->|"write DASH"| S3P
+    WK -->|"update status"| DB
+    S3P -->|"origin"| CDN
+    CDN -->|"stream"| User
 
-    %% ── S3 ──
-    S3R["S3 Raw Bucket\nOriginal uploads"]
-    S3P["S3 Processed Bucket\nDASH segments + MPD"]
-
-    %% ── Transcoding ──
-    KEDA["KEDA\nWatches queue depth"]
-    TW["Transcoder Worker Pod\nSpot nodes · KEDA scaled"]
-    FF["FFmpeg + Bento4\nEncode → DASH segments"]
-
-    %% ── CDN ──
-    CDN["☁️ CloudFront CDN\nEdge cache · MPD + m4s"]
-
-    %% ── Flows ──
-    CF -->|"app.domain.com"| ALB
-    AF -->|"admin.domain.com"| ALB
-    ALB --> BE
-
-    BE --> DB
-    BE -->|"SendMessage"| SQS
-
-    AF -->|"Presigned PUT\nDirect upload"| S3R
-
-    SQS -->|"Polls queue depth"| KEDA
-    KEDA -->|"Scales pods"| TW
-
-    TW -->|"ReceiveMessage\nDownload raw file"| S3R
-    TW --> FF
-    TW -->|"UPDATE status"| DB
-
-    FF -->|"Upload DASH output"| S3P
-    S3P --> CDN
-
-    CDN -->|"Fetch MPD + segments"| CF
-
-    %% ── Styles ──
+    classDef edge      fill:#2D2D3A,stroke:#15151D,color:#EDEDF5
     classDef frontend  fill:#534AB7,stroke:#3C3489,color:#EEEDFE
     classDef backend   fill:#0F6E56,stroke:#085041,color:#E1F5EE
     classDef storage   fill:#185FA5,stroke:#0C447C,color:#E6F1FB
@@ -134,12 +122,13 @@ flowchart TD
     classDef transcode fill:#993C1D,stroke:#712B13,color:#FAECE7
     classDef cdn       fill:#0F6E56,stroke:#085041,color:#E1F5EE
 
-    class CF,AF frontend
-    class ALB,BE backend
+    class User,R53,ALB edge
+    class CFE,AFE frontend
+    class BE backend
     class DB storage
     class SQS queue
     class S3R,S3P s3
-    class KEDA,TW,FF transcode
+    class WK transcode
     class CDN cdn
 ```
 
@@ -152,7 +141,8 @@ flowchart TD
 │   ├── admin/       # admin dashboard            (see its README)
 │   ├── api/         # Flask catalog API          (see its README)
 │   └── transcode/   # SQS-driven DASH transcoder (see its README)
-├── kubernetes/     # K8s manifests: deployments, services, ingress, KEDA autoscaler
+├── kubernetes/     # K8s manifests for the local minikube + Floci deploy
+├── helm/           # Helm chart for the AWS/EKS deploy (see Running on AWS)
 ├── scripts/        # cluster lifecycle, Floci provisioning, deploy
 └── README.md       # you are here
 ```
@@ -247,6 +237,51 @@ CloudFront locally, so the player streams DASH straight from Floci's S3.
 scripts/cluster.sh stop     # stop the cluster + RDS bridge (state kept)
 scripts/cluster.sh delete   # remove the cluster entirely
 ```
+
+## Running on AWS (EKS)
+
+For production, the [`helm/`](helm/) chart deploys the whole stack to **EKS** — the
+client, admin, API, and the KEDA-autoscaled transcode worker, fronted by an **ALB**
+ingress. Unlike the local path, this assumes the cluster and AWS resources already
+exist; the script **only deploys the app with Helm**.
+
+**Prerequisites** (provision once — see [`notes.md`](notes.md)):
+
+- An **EKS** cluster with two node groups — `role=application` (untainted) and
+  `role=worker` (tainted `dedicated=worker:NoSchedule`) for the transcoder.
+- The **AWS Load Balancer Controller** (provides the `alb` IngressClass).
+- An **IRSA role** with S3 + SQS access, bound to the `animus-sa` service account.
+- **RDS MySQL**, the raw + DASH **S3** buckets, the transcode **SQS** queue, and a
+  **CloudFront** distribution in front of the DASH bucket.
+
+(KEDA is installed for you by the deploy script.)
+
+**Configure.** Edit the values at the top of [`scripts/deploy-helm-stack.sh`](scripts/deploy-helm-stack.sh) — it passes them to the chart with `--set`. Fill them in locally and keep real secrets out of commits:
+
+| Script variable     | Sets                      | Example                                                                   |
+| ------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| `ROLE_ARN`          | `serviceAccount.roleArn`  | `arn:aws:iam::123456789012:role/animus-irsa`                              |
+| `MYSQL_HOST`        | `config.mysql.host`       | `animus-mysql.abc123.ap-south-1.rds.amazonaws.com`                        |
+| `MYSQL_PASSWORD`    | `secrets.mysqlPassword`   | your RDS password                                                         |
+| `SQS_QUEUE_URL`     | `config.sqsQueueUrl`      | `https://sqs.ap-south-1.amazonaws.com/123456789012/animus-transcode-jobs` |
+| `DASH_BASE_URL`     | `config.dashBaseUrl`      | `https://d111111abcdef8.cloudfront.net`                                   |
+| `TMDB_API_KEY`      | `secrets.tmdbApiKey`      | optional — TMDB v3 API key (metadata import)                              |
+| `TMDB_ACCESS_TOKEN` | `secrets.tmdbAccessToken` | optional — TMDB v4 token (preferred)                                      |
+
+**Deploy.** Run the Helm deploy (it installs KEDA, then `helm upgrade --install`):
+
+```bash
+scripts/deploy-helm-stack.sh
+```
+
+Get the ALB address and point your DNS (`animus.com`, `admin.animus.com`) at it:
+
+```bash
+kubectl get ingress animus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+The API stays internal; each frontend's nginx proxies `/api` to it, and the player
+streams DASH from CloudFront.
 
 ## Conventions
 

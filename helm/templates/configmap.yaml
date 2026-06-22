@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: animus-config
+data:
+  AWS_REGION: {{ .Values.config.region | quote }}
+  MYSQL_HOST: {{ required "config.mysql.host is required (RDS endpoint)" .Values.config.mysql.host | quote }}
+  MYSQL_PORT: {{ .Values.config.mysql.port | quote }}
+  MYSQL_USER: {{ .Values.config.mysql.user | quote }}
+  MYSQL_DATABASE: {{ .Values.config.mysql.database | quote }}
+  S3_RAW_BUCKET: {{ .Values.config.rawBucket | quote }}
+  S3_DASH_BUCKET: {{ .Values.config.dashBucket | quote }}
+  SQS_QUEUE_URL: {{ .Values.config.sqsQueueUrl | quote }}
+  SQS_TRANSCODE_QUEUE_URL: {{ required "config.sqsQueueUrl is required" .Values.config.sqsQueueUrl | quote }}
+  DASH_PUBLIC_BASE_URL: {{ required "config.dashBaseUrl is required (CloudFront base URL)" .Values.config.dashBaseUrl | quote }}

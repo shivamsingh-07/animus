@@ -2,7 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: animus-api
+  labels:
+    app: animus-api
 spec:
+  replicas: {{ .Values.api.replicas }}
   selector:
     matchLabels:
       app: animus-api
@@ -11,8 +14,7 @@ spec:
       labels:
         app: animus-api
     spec:
-      nodeSelector:
-        role: application
+      serviceAccountName: {{ .Values.serviceAccount.name }}
       initContainers:
         - name: wait-for-db
           image: busybox:1.38
@@ -26,7 +28,8 @@ spec:
             - until nc -z "$MYSQL_HOST" "$MYSQL_PORT"; do echo "waiting for db $MYSQL_HOST:$MYSQL_PORT"; sleep 2; done
       containers:
         - name: animus-api
-          image: abstergo07/animus-api:latest
+          image: "{{ .Values.image.repository }}/animus-api:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           envFrom:
             - configMapRef:
                 name: animus-config
@@ -34,40 +37,27 @@ spec:
                 name: animus-secrets
           ports:
             - containerPort: 4000
-          startupProbe:
-            httpGet:
-              path: /health
-              port: 4000
-            periodSeconds: 5
-            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /health
               port: 4000
             initialDelaySeconds: 5
             periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 4000
+            initialDelaySeconds: 15
             periodSeconds: 15
-            timeoutSeconds: 3
-            failureThreshold: 3
           resources:
-            requests:
-              memory: "256Mi"
-              cpu: "100m"
-            limits:
-              memory: "512Mi"
-              cpu: "200m"
-
+            {{- toYaml .Values.api.resources | nindent 12 }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: animus-api-svc
+  labels:
+    app: animus-api
 spec:
   selector:
     app: animus-api

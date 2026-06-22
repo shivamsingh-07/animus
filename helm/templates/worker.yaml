@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: animus-worker
+  labels:
+    app: animus-worker
+spec:
+  selector:
+    matchLabels:
+      app: animus-worker
+  template:
+    metadata:
+      labels:
+        app: animus-worker
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}/animus-worker:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:
+                name: animus-config
+            - secretRef:
+                name: animus-secrets
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
