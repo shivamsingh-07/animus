@@ -11,7 +11,7 @@ spec:
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: animus-worker-autoscaler
+  name: animus-worker
 spec:
   scaleTargetRef:
     name: animus-worker

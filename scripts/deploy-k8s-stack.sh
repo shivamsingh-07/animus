@@ -27,8 +27,8 @@ kubectl rollout status deploy/animus-admin --timeout=120s
 step 5/7 "Deploying transcoder worker"
 kubectl apply -f ../kubernetes/transcode.yaml
 
-step 6/7 "Applying KEDA autoscaler"
-kubectl apply -f ../kubernetes/autoscaler.yaml
+step 6/7 "Applying KEDA ScaledObject"
+kubectl apply -f ../kubernetes/scaledobject.yaml
 
 step 7/7 "Applying ingress"
 kubectl apply -f ../kubernetes/ingress.yaml

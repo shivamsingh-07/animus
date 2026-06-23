@@ -55,8 +55,9 @@ flag, **not** authentication — put real auth in front of it before production.
 - A reachable **MySQL 8** database (local or AWS RDS). Tables are created on
   startup via `db.create_all()`, but the database/schema itself must already
   exist. There is no fallback — the app fails fast if MySQL isn't configured.
-- AWS credentials + S3/SQS only if you exercise the upload pipeline; a TMDB
-  token only if you use metadata import.
+- AWS credentials + S3/SQS only if you exercise the upload pipeline.
+- A **TMDB** read token (`TMDB_ACCESS_TOKEN`) or v3 API key (`TMDB_API_KEY`) is
+  **required** — the admin adds titles by importing TMDB metadata.
 
 Python dependencies (`requirements.txt`): Flask, Flask-Cors, Flask-SQLAlchemy,
 SQLAlchemy, PyMySQL, waitress, boto3, python-dotenv, requests.
@@ -96,14 +97,12 @@ chain (the keys below, or an IAM role).
 | `AWS_ENDPOINT_URL`        | —                   | Custom S3/SQS endpoint (LocalStack/MinIO) |
 | `SQS_TRANSCODE_QUEUE_URL` | —                   | Transcode queue; empty disables enqueue   |
 
-**TMDB import (optional)**
+**TMDB import (required — set `TMDB_ACCESS_TOKEN` or `TMDB_API_KEY`)**
 
-| Variable            | Default                        | Purpose                        |
-| ------------------- | ------------------------------ | ------------------------------ |
-| `TMDB_ACCESS_TOKEN` | —                              | TMDB v4 read token (preferred) |
-| `TMDB_API_KEY`      | —                              | TMDB v3 API key (fallback)     |
-| `TMDB_API_BASE`     | `https://api.themoviedb.org/3` | TMDB API base URL              |
-| `TMDB_IMAGE_BASE`   | `https://image.tmdb.org/t/p`   | TMDB image base URL            |
+| Variable            | Default | Purpose                        |
+| ------------------- | ------- | ------------------------------ |
+| `TMDB_ACCESS_TOKEN` | —       | TMDB v4 read token (preferred) |
+| `TMDB_API_KEY`      | —       | TMDB v3 API key (fallback)     |
 
 ## Getting started
 

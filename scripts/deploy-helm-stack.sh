@@ -23,7 +23,7 @@ for v in ROLE_ARN MYSQL_HOST MYSQL_PASSWORD SQS_QUEUE_URL DASH_BASE_URL; do
 	fi
 done
 
-step 1/2 "Installing KEDA (transcode worker autoscaler)"
+step 1/2 "Installing KEDA (scales the transcode worker)"
 helm repo add kedacore https://kedacore.github.io/charts &>/dev/null
 helm repo update &>/dev/null
 helm upgrade --install keda kedacore/keda -n keda --create-namespace --wait --timeout 300s
