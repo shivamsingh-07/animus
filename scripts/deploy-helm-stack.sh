@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-ROLE_ARN="arn:aws:iam::<account-id>:role/animus-irsa"
-MYSQL_HOST="animus-mysql.<id>.<region>.rds.amazonaws.com"
+ROLE_ARN="arn:aws:iam::<account-id>:role/animus-cluster-irsa"
+MYSQL_HOST="animus-cluster-mysql.<id>.<region>.rds.amazonaws.com"
 MYSQL_PASSWORD="<rds-password>"
 SQS_QUEUE_URL="https://sqs.<region>.amazonaws.com/<account-id>/animus-transcode-jobs"
 DASH_BASE_URL="https://<distribution>.cloudfront.net"
@@ -14,7 +14,6 @@ step() {
 	echo "[$1] $2"
 }
 
-# Refuse to deploy while any required value is still an unedited placeholder.
 for v in ROLE_ARN MYSQL_HOST MYSQL_PASSWORD SQS_QUEUE_URL DASH_BASE_URL; do
 	val="${!v}"
 	if [ -z "$val" ] || [ "${val#*<}" != "$val" ]; then
@@ -29,7 +28,7 @@ helm repo update &>/dev/null
 helm upgrade --install keda kedacore/keda -n keda --create-namespace --wait --timeout 300s
 
 step 2/2 "Deploying ANIMUS"
-helm upgrade --install animus helm --wait --timeout 600s \
+helm upgrade --install animus helm --namespace default --wait --timeout 600s \
 	--set-string serviceAccount.roleArn="$ROLE_ARN" \
 	--set-string config.mysql.host="$MYSQL_HOST" \
 	--set-string config.sqsQueueUrl="$SQS_QUEUE_URL" \

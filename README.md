@@ -62,12 +62,12 @@ Only `ready` titles are served to the public client; the admin sees every status
 
 ## Architecture (AWS)
 
-The platform runs on an **EKS** cluster inside a multi-AZ **VPC**. **Route 53**
-resolves the public hostnames to an internet-facing **ALB** (provisioned by the AWS
-Load Balancer Controller), which fans `animus.com` and `admin.animus.com` to the
-client and admin pods. Those frontends are nginx and never touch the database — they
-proxy `/api` to the internal **Flask API**, which owns the **RDS MySQL** catalog and
-decouples ingest through an **SQS** queue.
+The platform runs on an **EKS** cluster inside a multi-AZ **VPC** (public + private
+subnets, NAT for egress). An internet-facing **ALB** — provisioned by the AWS Load
+Balancer Controller — attaches `animus.com` and `admin.animus.com` to the client and admin
+pods. Those frontends are nginx and never touch the database — they proxy `/api` to the
+internal **Flask API**, which owns the **RDS MySQL** catalog and decouples ingest
+through an **SQS** queue.
 
 The cluster runs two managed node groups: an untainted **`application`** group for the
 client/admin/API pods, and a tainted **`worker`** group dedicated to the CPU-heavy
@@ -82,14 +82,17 @@ live in the cluster.
 ```mermaid
 flowchart TB
     User["👤 Users"]
-    R53["Route 53"]
     ALB["ALB Ingress"]
 
     subgraph EKS["EKS Cluster"]
-        CFE["Client\nReact · nginx"]
-        AFE["Admin\nReact · nginx"]
-        BE["API\nFlask"]
-        WK["Transcoder\nFFmpeg + Bento4"]
+        subgraph NGA["application node group"]
+            CFE["Client\nReact · nginx"]
+            AFE["Admin\nReact · nginx"]
+            BE["API\nFlask"]
+        end
+        subgraph NGW["worker node group · SPOT"]
+            WK["Transcoder\nFFmpeg + Bento4"]
+        end
     end
 
     DB[("RDS MySQL")]
@@ -98,12 +101,12 @@ flowchart TB
     S3P["S3 · DASH"]
     CDN["☁️ CloudFront"]
 
-    User --> R53 --> ALB
-    ALB --> CFE
-    ALB --> AFE
+    User --> ALB
+    ALB -->|"animus.com"| CFE
+    ALB -->|"admin.animus.com"| AFE
     CFE -->|"/api"| BE
     AFE -->|"/api"| BE
-    AFE -->|"presigned upload"| S3R
+    AFE -->|"presigned PUT"| S3R
     BE -->|"catalog"| DB
     BE -->|"enqueue job"| SQS
     SQS -->|"KEDA scales"| WK
@@ -122,7 +125,7 @@ flowchart TB
     classDef transcode fill:#993C1D,stroke:#712B13,color:#FAECE7
     classDef cdn       fill:#0F6E56,stroke:#085041,color:#E1F5EE
 
-    class User,R53,ALB edge
+    class User,ALB edge
     class CFE,AFE frontend
     class BE backend
     class DB storage
@@ -142,9 +145,10 @@ flowchart TB
 │   ├── api/         # Flask catalog API          (see its README)
 │   └── transcode/   # SQS-driven DASH transcoder (see its README)
 ├── kubernetes/     # K8s manifests for the local minikube + Floci deploy
-├── helm/           # Helm chart for the AWS/EKS deploy (see Running on AWS)
-├── scripts/        # cluster lifecycle, Floci provisioning, deploy
-└── README.md       # you are here
+├── helm/           # Helm chart for the AWS deploy (see Running on AWS)
+├── terraform/      # Provisions AWS infra
+├── scripts/        # deployment and support scripts
+└── README.md
 ```
 
 ## Quick start
@@ -155,8 +159,8 @@ full per-service setup lives in each app's README.
 
 1. **API** — [apps/api](apps/api/README.md): create a venv, `pip install -r requirements.txt`,
    set the `MYSQL_*` values in `.env`, then `python run.py` (:4000).
-2. **Client** — [apps/client](apps/client/README.md): `npm install` then `npm run dev` (:5173).
-3. **Admin** — [apps/admin](apps/admin/README.md): `npm install` then `npm run dev` (:5174).
+2. **Client** — [apps/client](apps/client/README.md): `yarn install` then `yarn dev` (:5173).
+3. **Admin** — [apps/admin](apps/admin/README.md): `yarn install` then `yarn dev` (:5174).
 4. **Transcoder** — [apps/transcode](apps/transcode/README.md): a container that
    long-polls SQS against the shared S3 buckets and MySQL.
 
@@ -213,8 +217,9 @@ give in-cluster pods a stable name to reach it:
     ```
 
 4. **Check `kubernetes/config.yaml`.** For Floci the AWS keys are `test`/`test`,
-   `MYSQL_HOST: aws.animus.com` / `MYSQL_PORT: "7001"`, and `MYSQL_SSL_DISABLED:
-"true"` (Floci's MySQL advertises TLS but can't complete the handshake).
+   `MYSQL_HOST: aws.animus.com` / `MYSQL_PORT: "7001"`, and
+   `MYSQL_SSL_DISABLED: "true"` (Floci's MySQL advertises TLS but can't complete
+   the handshake).
 
 5. **Build and push the service images** to your container registry, then deploy
    the stack:
@@ -240,41 +245,77 @@ scripts/cluster.sh delete   # remove the cluster entirely
 
 ## Running on AWS (EKS)
 
-For production, the [`helm/`](helm/) chart deploys the whole stack to **EKS** — the
-client, admin, API, and the KEDA-autoscaled transcode worker, fronted by an **ALB**
-ingress. Unlike the local path, this assumes the cluster and AWS resources already
-exist; the script **only deploys the app with Helm**.
+Production runs on **EKS**: the AWS infrastructure is provisioned by **Terraform**
+([`terraform/`](terraform/)) and the app is deployed by the **Helm chart**
+([`helm/`](helm/)). Terraform stands up the VPC, EKS + node groups, RDS, the S3
+buckets, SQS, CloudFront, and the IRSA role; Helm then installs the workloads.
 
-**Prerequisites** (provision once — see [`notes.md`](notes.md)):
+**Prerequisites:** the `terraform`, `aws`, `kubectl`, and `helm` CLIs, plus AWS
+credentials allowed to create the resources above.
 
-- An **EKS** cluster with two node groups — `role=application` (untainted) and
-  `role=worker` (tainted `dedicated=worker:NoSchedule`) for the transcoder.
-- The **AWS Load Balancer Controller** (provides the `alb` IngressClass).
-- An **IRSA role** with S3 + SQS access, bound to the `animus-sa` service account.
-- **RDS MySQL**, the raw + DASH **S3** buckets, the transcode **SQS** queue, and a
-  **CloudFront** distribution in front of the DASH bucket.
+### 1. Provision the infrastructure (Terraform)
 
-(KEDA is installed for you by the deploy script.)
+> **Configure AWS first.** Set credentials for the target account (`aws configure`, or
+> `AWS_PROFILE` / `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY`).
 
-**Configure.** Edit the values at the top of [`scripts/deploy-helm-stack.sh`](scripts/deploy-helm-stack.sh) — it passes them to the chart with `--set`. Fill them in locally and keep real secrets out of commits:
+Terraform's S3 backend (`main.tf`) keeps state in a bucket named
+**`animus-terraform-state`** in `ap-south-1`. A backend can't create its own bucket, so
+it must exist **before** `terraform init` — create it once (versioning is recommended so
+state history is kept):
 
-| Script variable     | Sets                      | Example                                                                   |
-| ------------------- | ------------------------- | ------------------------------------------------------------------------- |
-| `ROLE_ARN`          | `serviceAccount.roleArn`  | `arn:aws:iam::123456789012:role/animus-irsa`                              |
-| `MYSQL_HOST`        | `config.mysql.host`       | `animus-mysql.abc123.ap-south-1.rds.amazonaws.com`                        |
-| `MYSQL_PASSWORD`    | `secrets.mysqlPassword`   | your RDS password                                                         |
-| `SQS_QUEUE_URL`     | `config.sqsQueueUrl`      | `https://sqs.ap-south-1.amazonaws.com/123456789012/animus-transcode-jobs` |
-| `DASH_BASE_URL`     | `config.dashBaseUrl`      | `https://d111111abcdef8.cloudfront.net`                                   |
-| `TMDB_API_KEY`      | `secrets.tmdbApiKey`      | optional — TMDB v3 API key (metadata import)                              |
-| `TMDB_ACCESS_TOKEN` | `secrets.tmdbAccessToken` | optional — TMDB v4 token (preferred)                                      |
+```bash
+aws s3 mb s3://animus-terraform-state --region ap-south-1
+aws s3api put-bucket-versioning --bucket animus-terraform-state \
+  --versioning-configuration Status=Enabled
+```
 
-**Deploy.** Run the Helm deploy (it installs KEDA, then `helm upgrade --install`):
+`db_password` is the only variable without a default — Terraform prompts you for it when
+you run `plan` or `apply`:
+
+```bash
+cd terraform
+terraform init
+terraform apply
+```
+
+When the apply finishes, point kubectl at the new cluster:
+
+```bash
+aws eks update-kubeconfig \
+  --region "$(terraform output -raw region)" \
+  --name "$(terraform output -raw cluster_name)"
+```
+
+### 2. Install the AWS Load Balancer Controller
+
+The `alb` IngressClass is served by the AWS Load Balancer Controller — a cluster
+add-on that isn't part of this chart. Install it once (its own Helm chart) so the
+Ingress can provision an ALB. (KEDA is installed for you in step 4.)
+
+### 3. Configure the deploy script
+
+`terraform output` prints the values to paste into the top of
+[`scripts/deploy-helm-stack.sh`](scripts/deploy-helm-stack.sh):
+
+| `terraform output` | Script variable | Helm value               |
+| ------------------ | --------------- | ------------------------ |
+| `role_arn`         | `ROLE_ARN`      | `serviceAccount.roleArn` |
+| `mysql_host`       | `MYSQL_HOST`    | `config.mysql.host`      |
+| `sqs_queue_url`    | `SQS_QUEUE_URL` | `config.sqsQueueUrl`     |
+| `dash_base_url`    | `DASH_BASE_URL` | `config.dashBaseUrl`     |
+
+Set `MYSQL_PASSWORD` to the same value you entered for `db_password` — Terraform
+doesn't output the password. `TMDB_API_KEY` / `TMDB_ACCESS_TOKEN` are required too,
+for the TMDB metadata import the admin uses to add titles.
+
+### 4. Deploy the app (Helm)
 
 ```bash
 scripts/deploy-helm-stack.sh
 ```
 
-Get the ALB address and point your DNS (`animus.com`, `admin.animus.com`) at it:
+It installs KEDA, then `helm upgrade --install`s the chart. Get the ALB address and
+point your DNS (`animus.com`, `admin.animus.com`) at it:
 
 ```bash
 kubectl get ingress animus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
